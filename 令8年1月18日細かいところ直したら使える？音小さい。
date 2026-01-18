@@ -1,0 +1,620 @@
+import SwiftUI
+import AVFoundation
+import Speech
+import Accelerate
+import Combine
+import StoreKit
+#if canImport(Translation)
+import Translation
+#endif
+
+// =====================================
+// 1. 19言語の設定定義
+// =====================================
+struct DoujituConfig: Identifiable, Hashable, Equatable {
+    let id: String
+    let appDisplayName: String
+    let subscriptionProductID: String
+    let privacyPolicyURL: URL
+    let userLangCode: String
+    let partnerLangCode: String
+    let userASRLocale: String
+    let partnerASRLocale: String
+    let partnerTTSLocale: String
+    let logsFolderName: String
+    let logFilePrefix: String
+    let viToJaLogFilePrefix: String
+    let resourceConsentUserDefaultsKey: String
+}
+
+struct SupportedLanguages {
+    static let list: [DoujituConfig] = [
+        .init(id: "ヒンディー語", appDisplayName: "Dujitu HI", subscriptionProductID: "Dujitu_HI_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "hi", userASRLocale: "ja-JP", partnerASRLocale: "hi-IN", partnerTTSLocale: "hi-IN", logsFolderName: "DujituHILogs", logFilePrefix: "hi", viToJaLogFilePrefix: "HItoJA", resourceConsentUserDefaultsKey: "DujituHI_Consent"),
+        .init(id: "英語", appDisplayName: "Dujitu EN", subscriptionProductID: "Dujitu_EN_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "en", userASRLocale: "ja-JP", partnerASRLocale: "en-US", partnerTTSLocale: "en-US", logsFolderName: "DujituENLogs", logFilePrefix: "en", viToJaLogFilePrefix: "ENtoJA", resourceConsentUserDefaultsKey: "DujituEN_Consent"),
+        .init(id: "中国語", appDisplayName: "Dujitu ZH", subscriptionProductID: "Dujitu_ZH_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "zh", userASRLocale: "ja-JP", partnerASRLocale: "zh-CN", partnerTTSLocale: "zh-CN", logsFolderName: "DujituZHLogs", logFilePrefix: "zh", viToJaLogFilePrefix: "ZHtoJA", resourceConsentUserDefaultsKey: "DujituZH_Consent"),
+        .init(id: "スペイン語", appDisplayName: "Dujitu ES", subscriptionProductID: "Dujitu_ES_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "es", userASRLocale: "ja-JP", partnerASRLocale: "es-ES", partnerTTSLocale: "es-ES", logsFolderName: "DujituESLogs", logFilePrefix: "es", viToJaLogFilePrefix: "EStoJA", resourceConsentUserDefaultsKey: "DujituES_Consent"),
+        .init(id: "フランス語", appDisplayName: "Dujitu FR", subscriptionProductID: "Dujitu_FR_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "fr", userASRLocale: "ja-JP", partnerASRLocale: "fr-FR", partnerTTSLocale: "fr-FR", logsFolderName: "DujituFRLogs", logFilePrefix: "fr", viToJaLogFilePrefix: "FRtoJA", resourceConsentUserDefaultsKey: "DujituFR_Consent"),
+        .init(id: "ドイツ語", appDisplayName: "Dujitu DE", subscriptionProductID: "Dujitu_DE_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "de", userASRLocale: "ja-JP", partnerASRLocale: "de-DE", partnerTTSLocale: "de-DE", logsFolderName: "DujituDELogs", logFilePrefix: "de", viToJaLogFilePrefix: "DEtoJA", resourceConsentUserDefaultsKey: "DujituDE_Consent"),
+        .init(id: "イタリア語", appDisplayName: "Dujitu IT", subscriptionProductID: "Dujitu_IT_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "it", userASRLocale: "ja-JP", partnerASRLocale: "it-IT", partnerTTSLocale: "it-IT", logsFolderName: "DujituITLogs", logFilePrefix: "it", viToJaLogFilePrefix: "ITtoJA", resourceConsentUserDefaultsKey: "DujituIT_Consent"),
+        .init(id: "韓国語", appDisplayName: "Dujitu KO", subscriptionProductID: "Dujitu_KO_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "ko", userASRLocale: "ja-JP", partnerASRLocale: "ko-KR", partnerTTSLocale: "ko-KR", logsFolderName: "DujituKOLogs", logFilePrefix: "ko", viToJaLogFilePrefix: "KOtoJA", resourceConsentUserDefaultsKey: "DujituKO_Consent"),
+        .init(id: "ポルトガル語", appDisplayName: "Dujitu PT", subscriptionProductID: "Dujitu_PT_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "pt", userASRLocale: "ja-JP", partnerASRLocale: "pt-PT", partnerTTSLocale: "pt-PT", logsFolderName: "DujituPTLogs", logFilePrefix: "pt", viToJaLogFilePrefix: "PTtoJA", resourceConsentUserDefaultsKey: "DujituPT_Consent"),
+        .init(id: "ロシア語", appDisplayName: "Dujitu RU", subscriptionProductID: "Dujitu_RU_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "ru", userASRLocale: "ja-JP", partnerASRLocale: "ru-RU", partnerTTSLocale: "ru-RU", logsFolderName: "DujituRULogs", logFilePrefix: "ru", viToJaLogFilePrefix: "RUtoJA", resourceConsentUserDefaultsKey: "DujituRU_Consent"),
+        .init(id: "タイ語", appDisplayName: "Dujitu TH", subscriptionProductID: "Dujitu_TH_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "th", userASRLocale: "ja-JP", partnerASRLocale: "th-TH", partnerTTSLocale: "th-TH", logsFolderName: "DujituTHLogs", logFilePrefix: "th", viToJaLogFilePrefix: "THtoJA", resourceConsentUserDefaultsKey: "DujituTH_Consent"),
+        .init(id: "ベトナム語", appDisplayName: "Dujitu VI", subscriptionProductID: "Dujitu_VI_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "vi", userASRLocale: "ja-JP", partnerASRLocale: "vi-VN", partnerTTSLocale: "vi-VN", logsFolderName: "DujituVILogs", logFilePrefix: "vi", viToJaLogFilePrefix: "VItoJA", resourceConsentUserDefaultsKey: "DujituVI_Consent"),
+        .init(id: "インドネシア語", appDisplayName: "Dujitu ID", subscriptionProductID: "Dujitu_ID_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "id", userASRLocale: "ja-JP", partnerASRLocale: "id-ID", partnerTTSLocale: "id-ID", logsFolderName: "DujituIDLogs", logFilePrefix: "id", viToJaLogFilePrefix: "IDtoJA", resourceConsentUserDefaultsKey: "DujituID_Consent"),
+        .init(id: "トルコ語", appDisplayName: "Dujitu TR", subscriptionProductID: "Dujitu_TR_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "tr", userASRLocale: "ja-JP", partnerASRLocale: "tr-TR", partnerTTSLocale: "tr-TR", logsFolderName: "DujituTRLogs", logFilePrefix: "tr", viToJaLogFilePrefix: "TRtoJA", resourceConsentUserDefaultsKey: "DujituTR_Consent"),
+        .init(id: "アラビア語", appDisplayName: "Dujitu AR", subscriptionProductID: "Dujitu_AR_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "ar", userASRLocale: "ja-JP", partnerASRLocale: "ar-SA", partnerTTSLocale: "ar-SA", logsFolderName: "DujituARLogs", logFilePrefix: "ar", viToJaLogFilePrefix: "ARtoJA", resourceConsentUserDefaultsKey: "DujituAR_Consent"),
+        .init(id: "オランダ語", appDisplayName: "Dujitu NL", subscriptionProductID: "Dujitu_NL_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "nl", userASRLocale: "ja-JP", partnerASRLocale: "nl-NL", partnerTTSLocale: "nl-NL", logsFolderName: "DujituNLLogs", logFilePrefix: "nl", viToJaLogFilePrefix: "NLtoJA", resourceConsentUserDefaultsKey: "DujituNL_Consent"),
+        .init(id: "スウェーデン語", appDisplayName: "Dujitu SV", subscriptionProductID: "Dujitu_SV_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "sv", userASRLocale: "ja-JP", partnerASRLocale: "sv-SE", partnerTTSLocale: "sv-SE", logsFolderName: "DujituSVLogs", logFilePrefix: "sv", viToJaLogFilePrefix: "SVtoJA", resourceConsentUserDefaultsKey: "DujituSV_Consent"),
+        .init(id: "ポーランド語", appDisplayName: "Dujitu PL", subscriptionProductID: "Dujitu_PL_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "pl", userASRLocale: "ja-JP", partnerASRLocale: "pl-PL", partnerTTSLocale: "pl-PL", logsFolderName: "DujituPLLogs", logFilePrefix: "pl", viToJaLogFilePrefix: "PLtoJA", resourceConsentUserDefaultsKey: "DujituPL_Consent"),
+        .init(id: "ウクライナ語", appDisplayName: "Dujitu UK", subscriptionProductID: "Dujitu_UK_monthly", privacyPolicyURL: URL(string: "https://example.com")!, userLangCode: "ja", partnerLangCode: "uk", userASRLocale: "ja-JP", partnerASRLocale: "uk-UA", partnerTTSLocale: "uk-UA", logsFolderName: "DujituUKLogs", logFilePrefix: "uk", viToJaLogFilePrefix: "UKtoJA", resourceConsentUserDefaultsKey: "DujituUK_Consent")
+    ]
+}
+
+// =====================================
+// 2. 状態管理
+// =====================================
+@MainActor
+final class LanguageManager: ObservableObject {
+    @Published var currentConfig: DoujituConfig {
+        didSet { UserDefaults.standard.set(currentConfig.id, forKey: "SelectedLangID") }
+    }
+    init() {
+        let saved = UserDefaults.standard.string(forKey: "SelectedLangID")
+        self.currentConfig = SupportedLanguages.list.first { $0.id == saved } ?? SupportedLanguages.list[0]
+    }
+}
+
+@MainActor final class TrialUsageStore: ObservableObject {
+    private let limit: Int
+    private let usedKey: String
+    @Published private(set) var used: Int
+    @Published private(set) var remaining: Int
+    @Published var isUnlocked: Bool = false
+    
+    init(limit: Int = 30, usedKey: String = "Dujitu_Trial_v1") {
+        self.limit = limit
+        self.usedKey = usedKey
+        let saved = UserDefaults.standard.integer(forKey: usedKey)
+        let safeUsed = max(0, saved)
+        self.used = safeUsed
+        self.remaining = max(0, limit - safeUsed)
+    }
+    
+    var canUseTranslation: Bool { isUnlocked || remaining > 0 }
+    func consumeOneIfNeeded() -> Bool {
+        if isUnlocked { return true }
+        guard remaining > 0 else { return false }
+        used += 1
+        UserDefaults.standard.set(used, forKey: usedKey)
+        remaining = max(0, limit - used)
+        return true
+    }
+}
+
+@MainActor final class SubscriptionStore: ObservableObject {
+    @Published var product: Product?
+    @Published var isSubscribed: Bool = false
+    @Published var isLoading: Bool = false
+    @Published var errorMessage: String?
+    @Published var hasCheckedSubscriptionStatus: Bool = false
+    private var config: DoujituConfig
+
+    init(config: DoujituConfig) {
+        self.config = config
+        Task { await refresh(); await observeTransactions() }
+    }
+
+    func updateConfig(_ newConfig: DoujituConfig) {
+        self.config = newConfig
+        Task { await refresh() }
+    }
+
+    func refresh() async {
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let products = try await Product.products(for: [config.subscriptionProductID])
+            self.product = products.first
+            await updateSubscriptionStatus()
+        } catch { self.errorMessage = "商品情報の取得に失敗しました" }
+    }
+
+    func purchase() async {
+        guard let product else { return }
+        isLoading = true
+        defer { isLoading = false }
+        do {
+            let result = try await product.purchase()
+            if case .success(let verification) = result {
+                let transaction = try checkVerified(verification)
+                await updateSubscriptionStatus()
+                await transaction.finish()
+            }
+        } catch { self.errorMessage = "購入処理に失敗しました" }
+    }
+
+    func restore() async {
+        isLoading = true
+        defer { isLoading = false }
+        try? await AppStore.sync()
+        await updateSubscriptionStatus()
+    }
+
+    func observeTransactions() async {
+        for await result in Transaction.updates {
+            if case .verified(_) = result {
+                await updateSubscriptionStatus()
+            }
+        }
+    }
+
+    func updateSubscriptionStatus() async {
+        var active = false
+        for await result in Transaction.currentEntitlements {
+            if case .verified(let transaction) = result, transaction.productID == config.subscriptionProductID {
+                active = (transaction.revocationDate == nil)
+                break
+            }
+        }
+        isSubscribed = active
+        hasCheckedSubscriptionStatus = true
+    }
+
+    private func checkVerified<T>(_ result: VerificationResult<T>) throws -> T {
+        switch result {
+        case .unverified(_, let error): throw error
+        case .verified(let signedType): return signedType
+        }
+    }
+}
+
+// =====================================
+// 3. サービス層 (ASR: 音声認識)
+// =====================================
+final class ASRService: NSObject {
+    private let recognizer: SFSpeechRecognizer?
+    private let audioEngine = AVAudioEngine()
+    private var request: SFSpeechAudioBufferRecognitionRequest?
+    private var task: SFSpeechRecognitionTask?
+    private let preferredSampleRate: Double
+    private(set) var didEmitFinal = false
+    
+    private var onPartialHandler: (@MainActor @Sendable (String)->Void)?
+    private var onFinalHandler: (@MainActor @Sendable (String)->Void)?
+    
+    private var isStarting = false
+    private var paused = false
+    private var inputTapInstalled = false
+
+    init(localeIdentifier: String, preferredSampleRate: Double = 44_100) {
+        self.recognizer = SFSpeechRecognizer(locale: Locale(identifier: localeIdentifier))
+        self.preferredSampleRate = preferredSampleRate
+        super.init()
+    }
+
+    @MainActor func requestAuthorization() async throws {
+        let status = await withCheckedContinuation { (cont: CheckedContinuation<SFSpeechRecognizerAuthorizationStatus, Never>) in
+            SFSpeechRecognizer.requestAuthorization { cont.resume(returning: $0) }
+        }
+        guard status == .authorized else { throw NSError(domain: "ASR", code: 1, userInfo: nil) }
+    }
+
+    @MainActor func startContinuous(onPartial: @escaping @MainActor @Sendable (String)->Void, onFinal: @escaping @MainActor @Sendable (String)->Void) throws {
+        if isStarting { return }
+        isStarting = true
+        defer { isStarting = false }
+        paused = false
+        cancelAll()
+        didEmitFinal = false
+        onPartialHandler = onPartial
+        onFinalHandler = onFinal
+        try configureAndStartEngine()
+        startRecognitionTask()
+    }
+
+    @MainActor func pause() {
+        paused = true
+        if inputTapInstalled { audioEngine.inputNode.removeTap(onBus: 0); inputTapInstalled = false }
+        if audioEngine.isRunning { audioEngine.stop() }
+    }
+
+    @MainActor func resume(onPartial: @escaping @MainActor @Sendable (String)->Void, onFinal: @escaping @MainActor @Sendable (String)->Void) {
+        guard paused else { return }
+        paused = false
+        onPartialHandler = onPartial
+        onFinalHandler = onFinal
+        do { try configureAndStartEngine(); startRecognitionTask() } catch { cancelAll() }
+    }
+
+    @MainActor func finishInput() {
+        if inputTapInstalled { audioEngine.inputNode.removeTap(onBus: 0); inputTapInstalled = false }
+        if audioEngine.isRunning { audioEngine.stop() }
+        request?.endAudio()
+    }
+
+    @MainActor func cancelAll() {
+        if inputTapInstalled { audioEngine.inputNode.removeTap(onBus: 0); inputTapInstalled = false }
+        if audioEngine.isRunning { audioEngine.stop() }
+        audioEngine.reset()
+        request?.endAudio()
+        task?.cancel()
+        task = nil
+        request = nil
+    }
+
+    @MainActor private func configureAndStartEngine() throws {
+        let session = AVAudioSession.sharedInstance()
+        // 録音モードの設定
+        try session.setCategory(.playAndRecord, mode: .measurement, options: [.duckOthers, .defaultToSpeaker])
+        try session.setActive(true, options: .notifyOthersOnDeactivation)
+        
+        let req = SFSpeechAudioBufferRecognitionRequest()
+        req.shouldReportPartialResults = true
+        if #available(iOS 13.0, *), recognizer?.supportsOnDeviceRecognition == true { req.requiresOnDeviceRecognition = true }
+        self.request = req
+
+        let input = audioEngine.inputNode
+        let fmt = input.outputFormat(forBus: 0)
+        input.installTap(onBus: 0, bufferSize: 1024, format: fmt) { buffer, _ in req.append(buffer) }
+        inputTapInstalled = true
+
+        audioEngine.prepare()
+        try audioEngine.start()
+    }
+
+    @MainActor private func startRecognitionTask() {
+        guard let req = self.request else { return }
+        task = recognizer?.recognitionTask(with: req) { [weak self] result, error in
+            Task { @MainActor in
+                guard let self = self else { return }
+                if let r = result {
+                    let text = r.bestTranscription.formattedString
+                    if r.isFinal {
+                        self.didEmitFinal = true
+                        self.onFinalHandler?(text)
+                    } else {
+                        self.onPartialHandler?(text)
+                    }
+                }
+                if let nsErr = error as NSError?, nsErr.code == 1101 {
+                    self.softRestart()
+                }
+            }
+        }
+    }
+
+    @MainActor private func softRestart() {
+        cancelAll()
+        try? configureAndStartEngine()
+        startRecognitionTask()
+    }
+}
+
+// =====================================
+// 3. サービス層 (TTS: 音声合成) - 音量修正版
+// =====================================
+@MainActor
+final class TTSSpeaker: NSObject, AVSpeechSynthesizerDelegate {
+    private let synth = AVSpeechSynthesizer()
+    @Published var isSpeaking = false
+    var onFinish: (@MainActor @Sendable () -> Void)?
+    var locale: String = "en-US"
+
+    override init() {
+        super.init()
+        synth.delegate = self
+    }
+
+    func stopImmediately() {
+        synth.stopSpeaking(at: .immediate)
+        isSpeaking = false
+    }
+
+    func speak(_ text: String) {
+        stopImmediately()
+        
+        // オーディオセッションを再生モードに切り替える（重要：音量確保のため）
+        let session = AVAudioSession.sharedInstance()
+        do {
+            // .playback カテゴリに変更し、スピーカー出力を強制
+            try session.setCategory(.playback, mode: .default, options: [.duckOthers, .defaultToSpeaker])
+            try session.setActive(true)
+        } catch {
+            print("TTS Session Error: \(error)")
+        }
+
+        let u = AVSpeechUtterance(string: text)
+        u.voice = AVSpeechSynthesisVoice(language: locale)
+        u.volume = 1.0  // 最大音量
+        u.rate = AVSpeechUtteranceDefaultSpeechRate // 標準速度
+        
+        isSpeaking = true
+        synth.speak(u)
+    }
+
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didFinish utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.isSpeaking = false
+            self.onFinish?()
+        }
+    }
+    
+    nonisolated func speechSynthesizer(_ synthesizer: AVSpeechSynthesizer, didCancel utterance: AVSpeechUtterance) {
+        Task { @MainActor in
+            self.isSpeaking = false
+        }
+    }
+}
+
+// =====================================
+// 4. ViewModel (19言語切替対応)
+// =====================================
+@MainActor final class DoujituVM: ObservableObject {
+    @Published var enLivePartial: String = ""
+    @Published var jaFromEN: String = ""
+    @Published var partialJA: String = ""
+    @Published var enFromJA: String = ""
+    @Published var isRecordingJA = false
+    @Published var isENContinuousRunning = false
+    @Published var errorMessage: String?
+    
+    private var config: DoujituConfig
+    private let trialStore: TrialUsageStore
+    private var asrPartner: ASRService
+    private let asrJA = ASRService(localeIdentifier: "ja-JP")
+    private let tts = TTSSpeaker()
+    
+    #if canImport(Translation)
+    @Published var tConfigPartnerToJA: TranslationSession.Configuration?
+    @Published var tConfigJAToPartner: TranslationSession.Configuration?
+    private var sessionPartnerToJA: TranslationSession?
+    private var sessionJAToPartner: TranslationSession?
+    #endif
+
+    init(config: DoujituConfig, trialStore: TrialUsageStore) {
+        self.config = config
+        self.trialStore = trialStore
+        self.asrPartner = ASRService(localeIdentifier: config.partnerASRLocale)
+        self.tts.locale = config.partnerTTSLocale
+        // TTSが終わったら相手側の認識を再開
+        self.tts.onFinish = { [weak self] in
+            Task { @MainActor in await self?.startPartnerASR() }
+        }
+        setupTranslationConfigs()
+    }
+    
+    func updateConfig(_ newConfig: DoujituConfig) {
+        self.config = newConfig
+        self.asrPartner.cancelAll()
+        self.asrPartner = ASRService(localeIdentifier: newConfig.partnerASRLocale)
+        self.tts.locale = newConfig.partnerTTSLocale
+        setupTranslationConfigs()
+    }
+
+    private func setupTranslationConfigs() {
+        #if canImport(Translation)
+        tConfigPartnerToJA = .init(source: .init(identifier: config.partnerLangCode), target: .init(identifier: "ja"))
+        tConfigJAToPartner = .init(source: .init(identifier: "ja"), target: .init(identifier: config.partnerLangCode))
+        #endif
+    }
+
+    #if canImport(Translation)
+    func bindSessionPartnerToJA(_ s: TranslationSession) { sessionPartnerToJA = s }
+    func bindSessionJAToPartner(_ s: TranslationSession) { sessionJAToPartner = s }
+    #endif
+
+    func startPartnerASR() async {
+        guard trialStore.canUseTranslation else { return }
+        do {
+            try await asrPartner.requestAuthorization()
+            try asrPartner.startContinuous(onPartial: { [weak self] text in
+                self?.enLivePartial = text
+                if let self = self {
+                    Task { await self.translatePartnerToJA(text) }
+                }
+            }, onFinal: { [weak self] text in
+                if let self = self {
+                    Task { await self.translatePartnerToJA(text, isFinal: true) }
+                }
+            })
+            isENContinuousRunning = true
+        } catch { self.errorMessage = "認識開始エラー" }
+    }
+
+    private func translatePartnerToJA(_ text: String, isFinal: Bool = false) async {
+        #if canImport(Translation)
+        guard let s = sessionPartnerToJA, !text.isEmpty else { return }
+        if isFinal && !trialStore.consumeOneIfNeeded() { return }
+        do {
+            let res = try await s.translate(text)
+            self.jaFromEN = res.targetText
+        } catch { }
+        #endif
+    }
+
+    func startRecordingJA() async {
+        isRecordingJA = true
+        asrPartner.pause() // 自分の録音時は相手側の認識を止める
+        try? await asrJA.requestAuthorization()
+        try? asrJA.startContinuous(onPartial: { [weak self] text in
+            self?.partialJA = text
+        }, onFinal: { [weak self] text in
+            if let self = self {
+                Task { await self.translateJAToPartner(text) }
+            }
+        })
+    }
+
+    func stopRecordingJA() {
+        isRecordingJA = false
+        asrJA.finishInput()
+    }
+
+    private func translateJAToPartner(_ text: String) async {
+        #if canImport(Translation)
+        guard let s = sessionJAToPartner, !text.isEmpty else { return }
+        if !trialStore.consumeOneIfNeeded() { return }
+        do {
+            let res = try await s.translate(text)
+            self.enFromJA = res.targetText
+            // 翻訳完了後にTTSで発話
+            tts.speak(res.targetText)
+        } catch { }
+        #endif
+    }
+}
+
+// =====================================
+// 5. UI Components
+// =====================================
+struct SubscriptionView: View {
+    @EnvironmentObject var store: SubscriptionStore
+    @EnvironmentObject var trial: TrialUsageStore
+    @EnvironmentObject var lang: LanguageManager
+    let eulaURL = URL(string: "https://www.apple.com/legal/internet-services/itunes/dev/stdeula/")!
+
+    var body: some View {
+        VStack(spacing: 20) {
+            Text(lang.currentConfig.appDisplayName).font(.largeTitle).bold()
+            Text("「\(lang.currentConfig.id)」との通訳アプリ").font(.headline)
+            Text("残りお試し回数: \(trial.remaining)回").foregroundColor(.secondary)
+
+            if let p = store.product {
+                Button(action: { Task { await store.purchase() } }) {
+                    Text("\(p.displayPrice)で購読を開始").bold().padding().frame(maxWidth: .infinity).background(Color.blue).foregroundColor(.white).cornerRadius(10)
+                }
+            }
+            
+            Button("購入を復元") { Task { await store.restore() } }
+            
+            HStack {
+                Link("プライバシーポリシー", destination: lang.currentConfig.privacyPolicyURL)
+                Text("|")
+                Link("利用規約", destination: eulaURL)
+            }.font(.caption)
+        }.padding()
+    }
+}
+
+struct RootView: View {
+    @EnvironmentObject var store: SubscriptionStore
+    @EnvironmentObject var trial: TrialUsageStore
+    @EnvironmentObject var lang: LanguageManager
+    
+    var body: some View {
+        if store.isSubscribed || trial.canUseTranslation {
+            ContentView()
+        } else {
+            SubscriptionView()
+        }
+    }
+}
+
+struct ContentView: View {
+    @EnvironmentObject var lang: LanguageManager
+    @EnvironmentObject var trial: TrialUsageStore
+    @StateObject var vm: DoujituVM
+    @State private var showLangPicker = false
+
+    init() {
+        let initialConfig = LanguageManager().currentConfig
+        let initialTrial = TrialUsageStore()
+        _vm = StateObject(wrappedValue: DoujituVM(config: initialConfig, trialStore: initialTrial))
+    }
+
+    var body: some View {
+        NavigationStack {
+            VStack {
+                VStack {
+                    Text("相手 (\(lang.currentConfig.id))").font(.caption)
+                    Text(vm.enLivePartial).italic()
+                    Text(vm.jaFromEN).font(.title).bold().foregroundColor(.blue)
+                }.padding().frame(maxWidth: .infinity).background(Color.gray.opacity(0.1))
+
+                Spacer()
+
+                VStack {
+                    Text(vm.enFromJA).font(.title2).foregroundColor(.green)
+                    Text(vm.partialJA).foregroundColor(.secondary)
+                    
+                    Button(action: {
+                        if vm.isRecordingJA { vm.stopRecordingJA() }
+                        else { Task { await vm.startRecordingJA() } }
+                    }) {
+                        Image(systemName: vm.isRecordingJA ? "stop.circle.fill" : "mic.circle.fill")
+                            .resizable().frame(width: 80, height: 80)
+                            .foregroundColor(vm.isRecordingJA ? .red : .blue)
+                    }
+                    Text(vm.isRecordingJA ? "話しかけてください..." : "ボタンを押して話す")
+                }.padding()
+            }
+            .navigationTitle(lang.currentConfig.appDisplayName)
+            .toolbar {
+                ToolbarItem(placement: .navigationBarTrailing) {
+                    Button(action: { showLangPicker = true }) {
+                        Image(systemName: "character.bubble.ja")
+                    }
+                }
+            }
+            .sheet(isPresented: $showLangPicker) {
+                LanguageSelectionView(vm: vm)
+            }
+            .task { await vm.startPartnerASR() }
+            #if canImport(Translation)
+            .translationTask(vm.tConfigPartnerToJA) { vm.bindSessionPartnerToJA($0) }
+            .translationTask(vm.tConfigJAToPartner) { vm.bindSessionJAToPartner($0) }
+            #endif
+        }
+    }
+}
+
+struct LanguageSelectionView: View {
+    @EnvironmentObject var lang: LanguageManager
+    @ObservedObject var vm: DoujituVM
+    @Environment(\.dismiss) var dismiss
+
+    var body: some View {
+        NavigationStack {
+            List(SupportedLanguages.list) { config in
+                Button(action: {
+                    lang.currentConfig = config
+                    vm.updateConfig(config)
+                    dismiss()
+                }) {
+                    HStack {
+                        Text(config.id)
+                        Spacer()
+                        if lang.currentConfig.id == config.id { Image(systemName: "checkmark") }
+                    }
+                }
+            }
+            .navigationTitle("言語を選択")
+        }
+    }
+}
+
+// =====================================
+// 6. App
+// =====================================
+@main
+struct Doujitu11App: App {
+    @StateObject var lang = LanguageManager()
+    @StateObject var trial = TrialUsageStore()
+    @StateObject var store: SubscriptionStore
+
+    init() {
+        let l = LanguageManager()
+        _lang = StateObject(wrappedValue: l)
+        _store = StateObject(wrappedValue: SubscriptionStore(config: l.currentConfig))
+    }
+
+    var body: some Scene {
+        WindowGroup {
+            RootView()
+                .environmentObject(lang)
+                .environmentObject(trial)
+                .environmentObject(store)
+        }
+    }
+}
